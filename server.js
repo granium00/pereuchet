@@ -14,6 +14,7 @@ const clients = new Set();
 const databaseUrl = process.env.DATABASE_URL;
 let pool = null;
 let dbReady = false;
+const removalTimers = new Map();
 
 function safeJsonParse(raw) {
   try {
@@ -103,6 +104,17 @@ async function insertLine(line) {
   );
 }
 
+async function deleteLine(id) {
+  const index = sharedLines.findIndex((line) => line.id === id);
+  if (index >= 0) {
+    sharedLines.splice(index, 1);
+  }
+  if (!dbReady || !pool) {
+    return;
+  }
+  await pool.query("DELETE FROM lines WHERE id = $1", [id]);
+}
+
 app
   .prepare()
   .then(() => {
@@ -158,42 +170,76 @@ app
 
       ws.on("message", async (data) => {
         const msg = safeJsonParse(data.toString());
-        if (!msg || msg.type !== "append") {
+        if (!msg || !msg.type) {
           return;
         }
 
-        let text = String(msg.text || "").trim();
-        let qty = msg.qty != null ? String(msg.qty).trim() : "";
-        let date = msg.date != null ? String(msg.date).trim() : "";
-        if (!text) {
-          return;
+        if (msg.type === "append") {
+          let text = String(msg.text || "").trim();
+          let qty = msg.qty != null ? String(msg.qty).trim() : "";
+          let date = msg.date != null ? String(msg.date).trim() : "";
+          if (!text) {
+            return;
+          }
+
+          if (text.length > 1000) {
+            text = text.slice(0, 1000);
+          }
+
+          if (qty.length > 20) {
+            qty = qty.slice(0, 20);
+          }
+
+          if (date.length > 20) {
+            date = date.slice(0, 20);
+          }
+
+          const line = {
+            id: makeId(),
+            text,
+            qty: qty || null,
+            date: date || null,
+            ts: Date.now(),
+          };
+
+          try {
+            await insertLine(line);
+            broadcast({ type: "append", line });
+          } catch (err) {
+            console.error("Failed to insert line", err);
+          }
         }
 
-        if (text.length > 1000) {
-          text = text.slice(0, 1000);
+        if (msg.type === "processed") {
+          const id = String(msg.id || "");
+          if (!id) {
+            return;
+          }
+          if (removalTimers.has(id)) {
+            return;
+          }
+          const timer = setTimeout(async () => {
+            removalTimers.delete(id);
+            try {
+              await deleteLine(id);
+              broadcast({ type: "remove", id });
+            } catch (err) {
+              console.error("Failed to delete line", err);
+            }
+          }, 5 * 60 * 1000);
+          removalTimers.set(id, timer);
         }
 
-        if (qty.length > 20) {
-          qty = qty.slice(0, 20);
-        }
-
-        if (date.length > 20) {
-          date = date.slice(0, 20);
-        }
-
-        const line = {
-          id: makeId(),
-          text,
-          qty: qty || null,
-          date: date || null,
-          ts: Date.now(),
-        };
-
-        try {
-          await insertLine(line);
-          broadcast({ type: "append", line });
-        } catch (err) {
-          console.error("Failed to insert line", err);
+        if (msg.type === "unprocess") {
+          const id = String(msg.id || "");
+          if (!id) {
+            return;
+          }
+          const timer = removalTimers.get(id);
+          if (timer) {
+            clearTimeout(timer);
+            removalTimers.delete(id);
+          }
         }
       });
 

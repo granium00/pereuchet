@@ -43,6 +43,9 @@ export default function ViewPage() {
         if (msg.type === "append" && msg.line) {
           setLines((prev) => [...prev, msg.line]);
         }
+        if (msg.type === "remove" && msg.id) {
+          setLines((prev) => prev.filter((line) => line.id !== msg.id));
+        }
       } catch {
         // ignore malformed messages
       }
@@ -66,6 +69,9 @@ export default function ViewPage() {
   const copyName = async (line: Line) => {
     await navigator.clipboard.writeText(line.text);
     setProcessed((prev) => ({ ...prev, [line.id]: true }));
+    if (wsRef.current && wsRef.current.readyState === wsRef.current.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "processed", id: line.id }));
+    }
   };
 
   const copyQty = async (line: Line) => {
@@ -88,6 +94,9 @@ export default function ViewPage() {
       delete next[line.id];
       return next;
     });
+    if (wsRef.current && wsRef.current.readyState === wsRef.current.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "unprocess", id: line.id }));
+    }
   };
 
   return (

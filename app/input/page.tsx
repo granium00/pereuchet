@@ -189,7 +189,7 @@ export default function InputPage() {
               );
             })}
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
+          <div className="action-row" style={{ marginTop: 12 }}>
             <input
               type="text"
               inputMode="numeric"
@@ -217,12 +217,12 @@ export default function InputPage() {
             >
               Дата
             </button>
-            {selected && (
-              <div className="status">
-                Выбрано: <span style={{ fontWeight: 600 }}>{selected}</span>
-              </div>
-            )}
           </div>
+          {selected && (
+            <div className="status" style={{ marginTop: 8 }}>
+              Выбрано: <span style={{ fontWeight: 600 }}>{selected}</span>
+            </div>
+          )}
         </div>
 
         <div>
