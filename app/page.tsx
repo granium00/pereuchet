@@ -1,3 +1,5 @@
+import SettingsPanel from "./settings-panel";
+
 export default function HomePage() {
   return (
     <section className="card">
@@ -20,6 +22,11 @@ export default function HomePage() {
           </div>
         </a>
       </div>
+
+      <details className="settings">
+        <summary>Настройки</summary>
+        <SettingsPanel />
+      </details>
     </section>
   );
 }

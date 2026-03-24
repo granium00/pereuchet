@@ -15,6 +15,7 @@ const databaseUrl = process.env.DATABASE_URL;
 let pool = null;
 let dbReady = false;
 const removalTimers = new Map();
+const RESET_PASSWORD = "taras00";
 
 function safeJsonParse(raw) {
   try {
@@ -123,6 +124,41 @@ app
   .then(() => {
     const server = http.createServer((req, res) => {
       const parsedUrl = parse(req.url, true);
+
+      if (parsedUrl.pathname === "/admin/reset" && req.method === "POST") {
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", async () => {
+          try {
+            const data = JSON.parse(body || "{}");
+            if (data.password !== RESET_PASSWORD) {
+              res.writeHead(401, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Неверный пароль." }));
+              return;
+            }
+
+            sharedLines.length = 0;
+            for (const timer of removalTimers.values()) {
+              clearTimeout(timer);
+            }
+            removalTimers.clear();
+
+            if (dbReady && pool) {
+              await pool.query("DELETE FROM lines");
+            }
+
+            broadcast({ type: "reset" });
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+          } catch (err) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Не удалось выполнить сброс." }));
+          }
+        });
+        return;
+      }
 
       if (parsedUrl.pathname === "/healthz") {
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });

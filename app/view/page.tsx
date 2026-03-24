@@ -46,6 +46,10 @@ export default function ViewPage() {
         if (msg.type === "remove" && msg.id) {
           setLines((prev) => prev.filter((line) => line.id !== msg.id));
         }
+        if (msg.type === "reset") {
+          setLines([]);
+          setProcessed({});
+        }
       } catch {
         // ignore malformed messages
       }
@@ -72,6 +76,10 @@ export default function ViewPage() {
     if (wsRef.current && wsRef.current.readyState === wsRef.current.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "processed", id: line.id }));
     }
+  };
+
+  const copyNamePlain = async (line: Line) => {
+    await navigator.clipboard.writeText(line.text);
   };
 
   const copyQty = async (line: Line) => {
@@ -177,16 +185,8 @@ export default function ViewPage() {
                   <div key={line.id} className="list-row">
                     <button
                       type="button"
-                      className="reset-btn"
-                      onClick={() => resetProcessed(line)}
-                      title="Снять пометку"
-                    >
-                      ↺
-                    </button>
-                    <button
-                      type="button"
-                      className={`name-chip${processed[line.id] ? " processed" : ""}`}
-                      onClick={() => copyName(line)}
+                      className="name-chip"
+                      onClick={() => copyNamePlain(line)}
                       title="Скопировать наименование"
                     >
                       {line.text}
