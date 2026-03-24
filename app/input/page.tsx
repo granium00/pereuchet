@@ -19,8 +19,12 @@ function getWsUrl() {
 export default function InputPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
-  const [text, setText] = useState("");
   const [connected, setConnected] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket(getWsUrl());
@@ -49,20 +53,45 @@ export default function InputPage() {
     };
   }, []);
 
-  const sendLine = () => {
-    const value = text.trim();
-    if (!value || !wsRef.current || wsRef.current.readyState !== wsRef.current.OPEN) {
+  const search = async () => {
+    const value = query.trim();
+    setSelected(null);
+    setError(null);
+
+    if (!value) {
+      setResults([]);
       return;
     }
 
-    wsRef.current.send(JSON.stringify({ type: "append", text: value }));
-    setText("");
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Ошибка поиска.");
+      }
+      setResults(Array.isArray(data.results) ? data.results : []);
+    } catch (err) {
+      setError("Не удалось выполнить поиск. Проверьте базу данных.");
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const sendSelected = () => {
+    if (!selected || !wsRef.current || wsRef.current.readyState !== wsRef.current.OPEN) {
+      return;
+    }
+
+    wsRef.current.send(JSON.stringify({ type: "append", text: selected }));
+    setSelected(null);
   };
 
   return (
     <section className="card">
       <div className="tag">Ввод данных</div>
-      <h1 style={{ marginTop: 12, marginBottom: 8 }}>Добавьте строку</h1>
+      <h1 style={{ marginTop: 12, marginBottom: 8 }}>Найдите нужную строку</h1>
       <p className="status">
         Статус соединения: {connected ? "подключено" : "нет связи"}
       </p>
@@ -71,18 +100,57 @@ export default function InputPage() {
         <div className="input-row">
           <input
             type="text"
-            placeholder="Введите текст и нажмите ОК"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
+            placeholder="Введите слово или фразу и нажмите Искать"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
-                sendLine();
+                search();
               }
             }}
           />
-          <button onClick={sendLine} disabled={!connected || !text.trim()}>
-            ОК
+          <button onClick={search} disabled={searching}>
+            {searching ? "Идет поиск..." : "Искать"}
           </button>
+        </div>
+
+        {error && <div className="status">{error}</div>}
+
+        <div>
+          <div className="choice-title" style={{ marginBottom: 10 }}>
+            Найденные совпадения
+          </div>
+          <div className="list">
+            {results.length === 0 && (
+              <div className="status">Пока нет результатов.</div>
+            )}
+            {results.map((line, index) => {
+              const isSelected = selected === line;
+              return (
+                <button
+                  key={`${line}-${index}`}
+                  type="button"
+                  className={`list-item${isSelected ? " selected" : ""}`}
+                  onClick={() => setSelected(line)}
+                >
+                  {line}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
+            <button
+              onClick={sendSelected}
+              disabled={!connected || !selected}
+            >
+              Выбрать и отправить
+            </button>
+            {selected && (
+              <div className="status">
+                Выбрано: <span style={{ fontWeight: 600 }}>{selected}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div>
