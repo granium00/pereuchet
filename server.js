@@ -57,8 +57,20 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS lines (
       id TEXT PRIMARY KEY,
       text TEXT NOT NULL,
+      qty TEXT,
+      date_text TEXT,
       ts BIGINT NOT NULL
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE lines
+    ADD COLUMN IF NOT EXISTS qty TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE lines
+    ADD COLUMN IF NOT EXISTS date_text TEXT;
   `);
 
   dbReady = true;
@@ -69,9 +81,15 @@ async function loadLinesFromDb() {
     return sharedLines;
   }
   const result = await pool.query(
-    "SELECT id, text, ts FROM lines ORDER BY ts ASC"
+    "SELECT id, text, qty, date_text, ts FROM lines ORDER BY ts ASC"
   );
-  return result.rows;
+  return result.rows.map((row) => ({
+    id: row.id,
+    text: row.text,
+    qty: row.qty,
+    date: row.date_text,
+    ts: Number(row.ts),
+  }));
 }
 
 async function insertLine(line) {
@@ -80,8 +98,8 @@ async function insertLine(line) {
     return;
   }
   await pool.query(
-    "INSERT INTO lines (id, text, ts) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
-    [line.id, line.text, line.ts]
+    "INSERT INTO lines (id, text, qty, date_text, ts) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING",
+    [line.id, line.text, line.qty || null, line.date || null, line.ts]
   );
 }
 
@@ -145,6 +163,8 @@ app
         }
 
         let text = String(msg.text || "").trim();
+        let qty = msg.qty != null ? String(msg.qty).trim() : "";
+        let date = msg.date != null ? String(msg.date).trim() : "";
         if (!text) {
           return;
         }
@@ -153,9 +173,19 @@ app
           text = text.slice(0, 1000);
         }
 
+        if (qty.length > 20) {
+          qty = qty.slice(0, 20);
+        }
+
+        if (date.length > 20) {
+          date = date.slice(0, 20);
+        }
+
         const line = {
           id: makeId(),
           text,
+          qty: qty || null,
+          date: date || null,
           ts: Date.now(),
         };
 

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 type Line = {
   id: string;
   text: string;
+  qty?: string | null;
+  date?: string | null;
   ts: number;
 };
 
@@ -21,6 +23,8 @@ export default function ViewPage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [connected, setConnected] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
+  const [processed, setProcessed] = useState<Record<string, boolean>>({});
+  const [tab, setTab] = useState<"main" | "dates">("main");
 
   useEffect(() => {
     const ws = new WebSocket(getWsUrl());
@@ -59,6 +63,33 @@ export default function ViewPage() {
     setTimeout(() => setCopyState("idle"), 1200);
   };
 
+  const copyName = async (line: Line) => {
+    await navigator.clipboard.writeText(line.text);
+    setProcessed((prev) => ({ ...prev, [line.id]: true }));
+  };
+
+  const copyQty = async (line: Line) => {
+    if (!line.qty) {
+      return;
+    }
+    await navigator.clipboard.writeText(line.qty);
+  };
+
+  const copyDate = async (line: Line) => {
+    if (!line.date) {
+      return;
+    }
+    await navigator.clipboard.writeText(line.date);
+  };
+
+  const resetProcessed = (line: Line) => {
+    setProcessed((prev) => {
+      const next = { ...prev };
+      delete next[line.id];
+      return next;
+    });
+  };
+
   return (
     <section className="card">
       <div className="tag">Просмотр</div>
@@ -77,18 +108,90 @@ export default function ViewPage() {
           </a>
         </div>
         <div>
+          <div className="tabs">
+            <button
+              type="button"
+              className={`tab-btn${tab === "main" ? " active" : ""}`}
+              onClick={() => setTab("main")}
+            >
+              Основные
+            </button>
+            <button
+              type="button"
+              className={`tab-btn${tab === "dates" ? " active" : ""}`}
+              onClick={() => setTab("dates")}
+            >
+              Даты
+            </button>
+          </div>
           <div className="choice-title" style={{ marginBottom: 10 }}>
-            Общий список
+            {tab === "main" ? "Общий список" : "Даты"}
           </div>
           <div className="list">
             {lines.length === 0 && (
               <div className="status">Пока нет данных.</div>
             )}
-            {lines.map((line) => (
-              <div key={line.id} className="list-item">
-                {line.text}
-              </div>
-            ))}
+            {tab === "main" &&
+              lines.map((line) => (
+                <div key={line.id} className="list-row">
+                  <button
+                    type="button"
+                    className="reset-btn"
+                    onClick={() => resetProcessed(line)}
+                    title="Снять пометку"
+                  >
+                    ↺
+                  </button>
+                  <button
+                    type="button"
+                    className={`name-chip${processed[line.id] ? " processed" : ""}`}
+                    onClick={() => copyName(line)}
+                    title="Скопировать наименование"
+                  >
+                    {line.text}
+                  </button>
+                  <button
+                    type="button"
+                    className="qty-chip"
+                    onClick={() => copyQty(line)}
+                    title="Скопировать цифру"
+                    disabled={!line.qty}
+                  >
+                    {line.qty || "—"}
+                  </button>
+                </div>
+              ))}
+            {tab === "dates" &&
+              lines
+                .filter((line) => line.date)
+                .map((line) => (
+                  <div key={line.id} className="list-row">
+                    <button
+                      type="button"
+                      className="reset-btn"
+                      onClick={() => resetProcessed(line)}
+                      title="Снять пометку"
+                    >
+                      ↺
+                    </button>
+                    <button
+                      type="button"
+                      className={`name-chip${processed[line.id] ? " processed" : ""}`}
+                      onClick={() => copyName(line)}
+                      title="Скопировать наименование"
+                    >
+                      {line.text}
+                    </button>
+                    <button
+                      type="button"
+                      className="qty-chip"
+                      onClick={() => copyDate(line)}
+                      title="Скопировать дату"
+                    >
+                      {line.date}
+                    </button>
+                  </div>
+                ))}
           </div>
         </div>
       </div>

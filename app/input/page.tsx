@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 type Line = {
   id: string;
   text: string;
+  qty?: string | null;
+  date?: string | null;
   ts: number;
 };
 
@@ -25,6 +27,29 @@ export default function InputPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qty, setQty] = useState("");
+  const [dateValue, setDateValue] = useState("");
+  const [dateOpen, setDateOpen] = useState(false);
+  const [dateDigits, setDateDigits] = useState("");
+
+  const formatDate = (digits: string) => {
+    const d = digits.slice(0, 8);
+    const parts = [];
+    if (d.length >= 2) {
+      parts.push(d.slice(0, 2));
+    } else if (d.length > 0) {
+      parts.push(d);
+    }
+    if (d.length >= 4) {
+      parts.push(d.slice(2, 4));
+    } else if (d.length > 2) {
+      parts.push(d.slice(2));
+    }
+    if (d.length > 4) {
+      parts.push(d.slice(4));
+    }
+    return parts.join(".");
+  };
 
   useEffect(() => {
     const ws = new WebSocket(getWsUrl());
@@ -80,12 +105,26 @@ export default function InputPage() {
   };
 
   const sendSelected = () => {
-    if (!selected || !wsRef.current || wsRef.current.readyState !== wsRef.current.OPEN) {
+    if (
+      !selected ||
+      !qty.trim() ||
+      !wsRef.current ||
+      wsRef.current.readyState !== wsRef.current.OPEN
+    ) {
       return;
     }
 
-    wsRef.current.send(JSON.stringify({ type: "append", text: selected }));
+    wsRef.current.send(
+      JSON.stringify({
+        type: "append",
+        text: selected,
+        qty: qty.trim(),
+        date: dateValue || null,
+      })
+    );
     setSelected(null);
+    setQty("");
+    setDateValue("");
   };
 
   return (
@@ -98,17 +137,29 @@ export default function InputPage() {
 
       <div className="input-panel" style={{ marginTop: 18 }}>
         <div className="input-row">
-          <input
-            type="text"
-            placeholder="Введите слово или фразу и нажмите Искать"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                search();
-              }
-            }}
-          />
+          <div className="input-wrap">
+            <input
+              type="text"
+              placeholder="Введите слово или фразу и нажмите Искать"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  search();
+                }
+              }}
+            />
+            {query && (
+              <button
+                type="button"
+                className="clear-btn"
+                onClick={() => setQuery("")}
+                aria-label="Очистить строку"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <button onClick={search} disabled={searching}>
             {searching ? "Идет поиск..." : "Искать"}
           </button>
@@ -139,11 +190,32 @@ export default function InputPage() {
             })}
           </div>
           <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="qty-input"
+              placeholder="Кол-во"
+              value={qty}
+              onChange={(event) =>
+                setQty(event.target.value.replace(/\D+/g, ""))
+              }
+            />
             <button
               onClick={sendSelected}
-              disabled={!connected || !selected}
+              disabled={!connected || !selected || !qty.trim()}
             >
               Выбрать и отправить
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                setDateDigits(dateValue.replace(/\D+/g, ""));
+                setDateOpen(true);
+              }}
+            >
+              Дата
             </button>
             {selected && (
               <div className="status">
@@ -164,11 +236,54 @@ export default function InputPage() {
             {lines.map((line) => (
               <div key={line.id} className="list-item">
                 {line.text}
+                {line.qty ? ` — ${line.qty}` : ""}
+                {line.date ? ` (${line.date})` : ""}
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {dateOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Введите дату</h2>
+            <p className="status">Формат: день.месяц.год</p>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="date-input"
+              placeholder="12.02.2027"
+              value={formatDate(dateDigits)}
+              onChange={(event) =>
+                setDateDigits(event.target.value.replace(/\D+/g, "").slice(0, 8))
+              }
+            />
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setDateOpen(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (dateDigits.length === 8) {
+                    setDateValue(formatDate(dateDigits));
+                    setDateOpen(false);
+                  }
+                }}
+                disabled={dateDigits.length !== 8}
+              >
+                ОК
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
