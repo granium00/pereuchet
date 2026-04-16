@@ -262,7 +262,7 @@ app
             } catch (err) {
               console.error("Failed to delete line", err);
             }
-          }, 5 * 60 * 1000);
+          }, 2 * 60 * 1000);
           removalTimers.set(id, timer);
         }
 
